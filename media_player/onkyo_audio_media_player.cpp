@@ -128,16 +128,31 @@ void OnkyoAudioMediaPlayer::loop() {
       break;
   }
 
+  // set physical volume.
   if (this->oldVolume != this->volume) {
     this->oldVolume = this->volume;
     this->setVolume(remap<uint8_t, float>(this->volume, 0.0f, 1.0f, 0, 78));
   }
 
+  // update volume state from physical state.
   this->volume = remap<float, uint8_t>(this->get_volume(), 0, 78, 0.0f, 1.0f);
   this->oldVolume = this->volume;
 
-  ESP_LOGD("onkyo power", "%i", get_power());
+  int power = get_power();
+  ESP_LOGD("onkyo power", "%i", power);
   ESP_LOGD("onkyo volume", "%i", get_volume());
+  
+  // update power state from physical power state.
+  if(power == 1 && (this->state == media_player::MEDIA_PLAYER_STATE_PAUSED))
+  {
+	  this->state = media_player::MEDIA_PLAYER_STATE_PLAYING;
+      this->publish_state();
+  }
+  else if(power == 0 && (this->state == media_player::MEDIA_PLAYER_STATE_PLAYING))
+  {
+	  this->state = media_player::MEDIA_PLAYER_STATE_PAUSED;
+      this->publish_state();
+  }
 }
 
 media_player::MediaPlayerTraits OnkyoAudioMediaPlayer::get_traits() {
