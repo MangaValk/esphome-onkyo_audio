@@ -5,6 +5,8 @@ Based on the work of https://github.com/zarpli/onkyo
 
 This is still a work in progress and will have bugs
 
+Currently using the play/pause button to control power since the esphome mediaPlayer component doesnt support power yet.
+
 esphome example yaml:
 ```
 esphome:
