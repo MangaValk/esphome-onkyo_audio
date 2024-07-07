@@ -128,15 +128,14 @@ void OnkyoAudioMediaPlayer::loop() {
       break;
   }
 
+  float newVolume = remap<float, uint8_t>(this->get_volume(), 0, 78, 0.0f, 1.0f);
   // set physical volume.
   if (this->oldVolume != this->volume) {
     this->oldVolume = this->volume;
     this->setVolume(remap<uint8_t, float>(this->volume, 0.0f, 1.0f, 0, 78));
   }
-
   // update volume state from physical state.
-  float newVolume = remap<float, uint8_t>(this->get_volume(), 0, 78, 0.0f, 1.0f);
-  if(this->volume != newVolume)
+  else if(this->volume != newVolume)
   {
 	  this->volume = newVolume;
 	  this->oldVolume = this->volume;
