@@ -135,8 +135,13 @@ void OnkyoAudioMediaPlayer::loop() {
   }
 
   // update volume state from physical state.
-  this->volume = remap<float, uint8_t>(this->get_volume(), 0, 78, 0.0f, 1.0f);
-  this->oldVolume = this->volume;
+  float newVolume = remap<float, uint8_t>(this->get_volume(), 0, 78, 0.0f, 1.0f);
+  if(this->volume != newVolume)
+  {
+	  this->volume = newVolume;
+	  this->oldVolume = this->volume;
+      this->publish_state();
+  }
 
   int power = get_power();
   ESP_LOGD("onkyo power", "%i", power);
