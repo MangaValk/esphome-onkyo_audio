@@ -143,8 +143,11 @@ void OnkyoAudioMediaPlayer::loop() {
   }
 
   int power = get_power();
-  ESP_LOGD("onkyo power", "%i", power);
-  ESP_LOGD("onkyo volume", "%i", get_volume());
+  if(millis() % 1000 < 50)
+  {
+	  ESP_LOGD("onkyo power", "%i", power);
+	  ESP_LOGD("onkyo volume", "%i", get_volume());
+  }
   
   // update power state from physical power state.
   if(power == 1 && (this->state == media_player::MEDIA_PLAYER_STATE_PAUSED))
