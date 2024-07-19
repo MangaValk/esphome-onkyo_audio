@@ -63,6 +63,7 @@ class OnkyoAudioMediaPlayer : public Component, public media_player::MediaPlayer
   
   // Onkyo
   float oldVolume = 0;
+  double volumeDelay;
   String readStringUntil(char terminator);
   int cmd(String cmd);
   uint8_t get_volume();
