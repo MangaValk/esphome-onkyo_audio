@@ -131,31 +131,42 @@ void OnkyoAudioMediaPlayer::loop() {
       break;
   }
 
-  //float newVolume = remap<float, uint8_t>(this->get_volume(), 0, 78, 0.0f, 1.0f);
   float newVolume = this->get_volume();
+  
   // set physical volume.
   if (this->oldVolume != this->volume) {
     this->oldVolume = this->volume;
-    this->setVolume(remap<uint8_t, float>(this->volume, 0.0f, 1.0f, 0, 78));
+	int mappedVolume = remap<uint8_t, float>(this->volume, 0.0f, 1.0f, 0, 78);
 	
-	this->volumeDelay = millis();
+	for (int counter = 0; counter <= 15; counter++)
+	{		
+		this->setVolume(mappedVolume);
+		float volumeAfterSet = this->get_volume();
+		if (abs(volumeAfterSet) - abs(mappedVolume) <= 3
+				&& abs(mappedVolume) - abs(volumeAfterSet) <= 3)
+			break;
+		
+		ESP_LOGD("onkyo retrying set volume: ", "%f", this->volume);
+		delay(100);	
+	}
+	
+	this->volumeDelay = millis() + 5000;
   }
   // update volume state from physical state.
-  else if(this->volume != newVolume && newVolume != -1)
+  else if(this->volume != newVolume && newVolume != -1 && (millis() - this->volumeDelay) > 0 )
   {
-	  //delay(100);
+	  delay(100);
 	  // check if volume hasnt changed.
-	  //if(newVolume == remap<float, uint8_t>(this->get_volume(), 0, 78, 0.0f, 1.0f))
 	  if(newVolume == this->get_volume())
 	  {
-		  if (newVolume >= 0 && newVolume <= 78 && (millis() - this->volumeDelay) > 1000 )
+		  if (newVolume >= 0 && newVolume <= 78)
 		  {
 			  this->volume = remap<float, uint8_t>(newVolume, 0, 78, 0.0f, 1.0f);
 			  this->oldVolume = this->volume;
 			  this->publish_state();
 			  ESP_LOGD("onkyo volume updated from physical state", "%f", this->volume);
 			  
-			  this->volumeDelay = millis();
+			  this->volumeDelay = millis() + 500;
 		  }
 	  }
   }
