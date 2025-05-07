@@ -7,8 +7,7 @@ namespace onkyo_audio {
 static const char *const TAG = "audio";
 
 void OnkyoAudioMediaPlayer::control(const media_player::MediaPlayerCall &call) {
-  media_player::MediaPlayerState play_state =
-      media_player::MEDIA_PLAYER_STATE_PLAYING;
+  media_player::MediaPlayerState play_state = media_player::MEDIA_PLAYER_STATE_PLAYING;
   if (call.get_announcement().has_value()) {
     play_state = call.get_announcement().value()
                      ? media_player::MEDIA_PLAYER_STATE_ANNOUNCING
@@ -25,18 +24,19 @@ void OnkyoAudioMediaPlayer::control(const media_player::MediaPlayerCall &call) {
     // this->unmute_();
   }
 
+  // check incoming command
   if (call.get_command().has_value()) {
     auto command = *call.get_command();
     if (command == media_player::MEDIA_PLAYER_COMMAND_PLAY) {
-      this->power(1);
+      this->onkyoObj->power(1);
       this->state = media_player::MEDIA_PLAYER_STATE_PLAYING;
-      ESP_LOGD("onkyo power turn on", "%i", get_power());
+      ESP_LOGD("onkyo power turn on", "%i", this->onkyoObj->get_power());
     } else if (command == media_player::MEDIA_PLAYER_COMMAND_STOP) {
-      this->power(0);
+      this->onkyoObj->power(0);
       this->state = media_player::MEDIA_PLAYER_STATE_PAUSED;
-      ESP_LOGD("onkyo power turn off", "%i", get_power());
+      ESP_LOGD("onkyo power turn off", "%i", this->onkyoObj->get_power());
     } else if (command == media_player::MEDIA_PLAYER_COMMAND_PAUSE) {
-      this->power(0);
+      this->onkyoObj->power(0);
       this->state = media_player::MEDIA_PLAYER_STATE_PAUSED;
     }
   }
@@ -108,7 +108,13 @@ void OnkyoAudioMediaPlayer::setup() {
   ESP_LOGCONFIG(TAG, "Setting up Audio...");
   this->state = media_player::MEDIA_PLAYER_STATE_IDLE;
 
-  float volume = this->get_volume();
+  if (this->onkyoObj == NULL)
+    this->onkyoObj = new OnkyoDevice();
+  this->onkyoObj->set_uart(this->uart_);
+
+  refreshPowerState();
+
+  float volume = this->onkyoObj->get_volume();
   if(volume == -1)
 	  volume = 0;
   this->volume = remap<float, uint8_t>(volume, 0, 78, 0.0f, 1.0f);
@@ -131,7 +137,7 @@ void OnkyoAudioMediaPlayer::loop() {
       break;
   }
 
-  float newVolume = this->get_volume();
+  float newVolume = this->onkyoObj->get_volume();
   
   // set physical volume.
   if (this->oldVolume != this->volume) {
@@ -140,8 +146,8 @@ void OnkyoAudioMediaPlayer::loop() {
 	
 	for (int counter = 0; counter <= 15; counter++)
 	{		
-		this->setVolume(mappedVolume);
-		float volumeAfterSet = this->get_volume();
+		this->onkyoObj->setVolume(mappedVolume);
+		float volumeAfterSet = this->onkyoObj->get_volume();
 		if (abs(volumeAfterSet) - abs(mappedVolume) <= 3
 				&& abs(mappedVolume) - abs(volumeAfterSet) <= 3)
 			break;
@@ -157,7 +163,7 @@ void OnkyoAudioMediaPlayer::loop() {
   {
 	  delay(100);
 	  // check if volume hasnt changed.
-	  if(newVolume == this->get_volume())
+	  if(newVolume == this->onkyoObj->get_volume())
 	  {
 		  if (newVolume >= 0 && newVolume <= 78)
 		  {
@@ -171,27 +177,10 @@ void OnkyoAudioMediaPlayer::loop() {
 	  }
   }
 
-  int power = get_power();
-  //if(millis() % 1000 < 50)
-  //{
-  //	ESP_LOGD("onkyo power", "%i", power);
-  //	ESP_LOGD("onkyo volume", "%i", get_volume());
-  //}
-  
-  // update power state from physical power state.
-  if(power == 1 && (this->state == media_player::MEDIA_PLAYER_STATE_PAUSED))
-  {
-	  this->state = media_player::MEDIA_PLAYER_STATE_PLAYING;
-      this->publish_state();
-	  ESP_LOGD("onkyo power updated from physical state", "%i", power);
-  }
-  else if(power == 0 && (this->state == media_player::MEDIA_PLAYER_STATE_PLAYING))
-  {
-	  this->state = media_player::MEDIA_PLAYER_STATE_PAUSED;
-      this->publish_state();
-	  ESP_LOGD("onkyo power updated from physical state", "%i", power);
-  }
+  refreshPowerState();
 }
+
+// functions
 
 media_player::MediaPlayerTraits OnkyoAudioMediaPlayer::get_traits() {
   auto traits = media_player::MediaPlayerTraits();
@@ -207,76 +196,29 @@ void OnkyoAudioMediaPlayer::dump_config() {
   }
 }
 
-// copilot code snippet
-String OnkyoAudioMediaPlayer::readStringUntil(char terminator) {
-  String str = "";
-  // char ch;
-  uint8_t ch;
-  while (this->uart_->available()) {
-    // ch = read();
-    this->uart_->read_byte(&ch);
-    if (ch == terminator) {
-      break;
-    }
-    str += (char)ch;
-    delay(10);  // small delay to allow buffer to fill
+void OnkyoAudioMediaPlayer::refreshPowerState()
+{
+  int power = this->onkyoObj->get_power();
+  //if(millis() % 1000 < 50)
+  //{
+  //	ESP_LOGD("onkyo power", "%i", power);
+  //	ESP_LOGD("onkyo volume", "%i", get_volume());
+  //}
+  ESP_LOGD("onkyo power", "%i", power);
+  
+  // update power state from physical power state.
+  if(power == 1 && (this->state != media_player::MEDIA_PLAYER_STATE_PLAYING))
+  {
+	  this->state = media_player::MEDIA_PLAYER_STATE_PLAYING;
+      this->publish_state();
+	  ESP_LOGD("onkyo power updated from physical state", "%i", power);
   }
-  return str;
-}
-
-int OnkyoAudioMediaPlayer::cmd(String cmd) {
-  String command = "!1" + cmd + "\r";
-  this->uart_->write_str(command.c_str());
-
-  unsigned long currentMillis = millis();
-
-  while (this->uart_->available() == 0)
-    if (millis() - currentMillis > SERIAL_TIME_OUT) return 0;
-
-  String incoming_string = readStringUntil(DEV_EC).substring(5, 7);
-
-  return strtoul(incoming_string.c_str(), NULL, 16);
-}
-
-uint8_t OnkyoAudioMediaPlayer::get_volume() {
-  // flush serial input buffer
-  uint8_t ch;
-  while (this->uart_->available()) this->uart_->read_byte(&ch);
-
-  String command = "!1MVLQSTN\r";
-  std::vector<uint8_t> vec(command.begin(), command.end());
-  this->uart_->write_array(vec);
-
-  unsigned long currentMillis = millis();
-  while (this->uart_->available() == 0)
-    if (millis() - currentMillis > SERIAL_TIME_OUT) return -1;
-
-  String incoming_string = readStringUntil(DEV_EC).substring(5, 7);
-  return (uint8_t)strtoul(incoming_string.c_str(), NULL, 16);
-}
-
-int OnkyoAudioMediaPlayer::get_power() {
-  // flush serial input buffer
-  uint8_t ch;
-  while (this->uart_->available()) this->uart_->read_byte(&ch);
-
-  return this->cmd("PWRQSTN") <= 0 ? 0 : 1;
-}
-
-void OnkyoAudioMediaPlayer::setVolume(uint8_t vol) {
-  char buffer[9];
-
-  sprintf(buffer, "!1MVL%02X\r", vol);
-
-  this->uart_->write_array((const uint8_t *)buffer, 9);
-}
-
-void OnkyoAudioMediaPlayer::power(uint8_t pow) {
-  char buffer[9];
-
-  sprintf(buffer, "!1PWR%02X\r", pow);
-
-  this->uart_->write_array((const uint8_t *)buffer, 9);
+  else if(power == 0 && (this->state != media_player::MEDIA_PLAYER_STATE_PAUSED))
+  {
+	  this->state = media_player::MEDIA_PLAYER_STATE_PAUSED;
+      this->publish_state();
+	  ESP_LOGD("onkyo power updated from physical state", "%i", power);
+  }
 }
 
 }  // namespace onkyo_audio
